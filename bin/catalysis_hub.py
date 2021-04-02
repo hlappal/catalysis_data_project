@@ -146,7 +146,7 @@ def parse_reaction(reaction, keyvalues):
             kv_pairs[kv] = "None"
     # Some null values need to be parsed explicitly
     for kv in keyvalues:
-        if not kv_pairs[kv]:
+        if kv_pairs[kv] is None:
             kv_pairs[kv] = "None"
     reaction_dict["key_value_pairs"] = kv_pairs
 

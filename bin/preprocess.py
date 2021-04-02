@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 
 """
+Functions for the catalysis reaction data preprocessing. The functions are
+quite ad hoc, and suited only for the raw data acquired from the
+Catalysis-hub and the CatApp catalysis reaction databases.
+
+Author:  Heikki Lappalainen
+E-mail:  heikki.lappalainen@protonmail.com
 """
 
 import json
@@ -8,10 +14,14 @@ import os
 import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
+from dscribe.descriptors import LMBTR
+from ase.io import read
+from ase import Atoms
 
 
 def preprocess(root_dir):
     """
+    Process the data into suitable form for the ML models.
     """
 
     df_cathub_raw = load_json(f"{root_dir}/data/reactions_cathub.json")
@@ -35,8 +45,9 @@ def preprocess(root_dir):
 
     # Save the data
     df.to_pickle(f"{root_dir}/data/data.csv")
+    print(f"Saved the processed data into file {root_dir}/data/data.csv")
 
-    return df_raw
+    return df
 
 
 def load_json(filename):
@@ -258,7 +269,168 @@ def draw_ea_plot(df, root_dir):
 
 def construct_struct_descriptors(root_dir):
     """
+    Construct a list of structural data for each reaction.
+
+    Arguments:
+      root_dir (path):    Project root directory
+    Returns:
+      structures (list):  List of reaction structures, where each item is a
+                           list of dictionaries. The dictionaries contain the
+                           structures as Ase Atoms objects, and the
+                           corresponding energies.
     """
 
     with open(f"{root_dir}/data/reactions_cathub.json", "r") as f:
         struct_data = json.load(f)
+
+    keys = list(struct_data.keys())
+    structures = []
+    # Iterate over the reactions
+    for key in keys:
+        structs = struct_data[key]['structures']
+        reaction_structures = []
+        # Iterate over the structures available for the current reaction
+        for struct in structs:
+            struct_dict = {}
+            # Save the provided input data into temporary XYZ file
+            with open("struct_tmp.xyz", "w") as f:
+                f.write(struct["InputFile"])
+            # Create an Atoms object from the XYZ file
+            atoms = read("struct_tmp.xyz")
+            # Save the Atoms object and the corresponding energy to a dictionary
+            struct_dict["atoms"] = atoms
+            struct_dict["energy"] = struct["energy"]
+            # Save the dictionary to a list for the current reaction
+            reaction_structures.append(struct_dict)
+        # Save the list of structure dictionaries into a global list for all reactions
+        structures.append(reaction_structures)
+
+    print(f"Loaded the structures for {len(structures)} reactions.")
+
+    # Build a list of initial-final structure pairs with the corresponding
+    # reaction indices
+    initial_final_structures, indices = initial_final_structures(structures)
+
+    print(f"Found {len(indices)} initial-final structure pairs.")
+
+    descriptors = []
+    targets = []
+
+    for i in range(len(initial_final_structures)):
+        descriptors.append(
+            build_structural_descriptor(initial_final_structures[i]))
+        targets.append(struct_data.iloc[i]["activationEnergy"])
+
+    # Pad the structural descriptors with zeros
+    max_len = 0
+    for row in descriptors:
+        if len(row) > max_len:
+            max_len = len(row)
+    for i,row in enumerate(descriptors):
+        descriptors[i] = list(row) + [0 for i in range(max_len - len(row))]
+    descriptors = np.array(descriptors)
+
+    print(f"Built {len(targets)} structural descriptor target pairs.")
+
+    # Save to file
+    np.savetxt(f"{root_dir}/data/structural_descriptors.txt", descriptors)
+    np.savetxt(f"{root_dir}/data/structural_targets.txt", targets)
+
+
+def get_initial_final_structures(reaction_structures):
+    """
+    Get the initial and final structures for the given reaction.
+    """
+
+    structure_list = []
+    for i,struct in enumerate(reaction_structures):
+        # Select only structures that have at least 10 atoms
+        # This avoids selecting isolated molecules
+        if len(struct["atoms"]) >= 10:
+            structure_list.append(struct)
+        # Return the first and the last structure only if more than two
+        # structures are found
+        if len(structure_list) > 1:
+            return [structure_list[0], structure_list[-1]]
+        else:
+            return None
+
+
+def initial_final_structures(structures):
+    """
+    Get the initial and final structures for the reactions.
+
+    Parameters:
+      structures (list):               List of structural data.
+    Returns:
+      init_fin_structures (np.array):  The initial and final structures for the
+                                        selected reactions.
+      indices (list):                  Indices for the selected reactions.
+    """
+
+    init_fin_structures = []
+    indices = []
+    # Get the initial and final structures for each reaction
+    for i,struct in enumerate(structures):
+        res = get_initial_final_structures(struct)
+        if res:
+            init_fin_structures.append(res)
+            indices.append(i)
+
+    return np.array(init_fin_structures), indices
+
+
+def build_structural_descriptor(structure):
+    """
+    """
+
+    # Get the initial and final structures
+    initial_structure = Atoms(structure[0]["atoms"])
+    final_structure = Atoms(structure[1]["atoms"])
+
+    # Get a list of all the chemical species in the system
+    species = []
+    species.extend(initial_structure.get_chemical_symbols())
+    species.extend(final_structure.get_chemical_symbols())
+    species = list(dict.fromkeys(species))
+
+    # Get the system periodicity
+    periodic = initial_structure.get_pbc().any()
+
+    # Initialize LMBTR descriptor
+    lmbtr = LMBTR(
+        species=species,
+        k2={
+            "geometry": {
+                "function": "distance"
+            },
+            "grid": {
+                "min": 0, "max": 5, "n": 50, "sigma": 0.005
+            },
+            "weighting": {
+                "function": "exponential", "scale": 0.5, "cutoff": 1e-3
+            },
+        },
+        k3={
+            "geometry": {
+                "function": "angle"
+            },
+            "grid": {
+                "min": 0, "max": 180, "n": 50, "sigma": 0.005
+            },
+            "weighting": {
+                "function": "exponential", "scale": 0.5, "cutoff": 1e-3
+            }
+        },
+        periodic=periodic,
+        normalization="l2_each",
+    )
+
+    # Build LMBTR descriptors from the initial and final structures
+    lmbtr_initial = lmbtr.create(initial_structure).flatten()
+    lmbtr_final = lmbtr.create(final_structure).flatten()
+
+    # Combine the two LMBTR descriptors into one array
+    lmbtr_total = np.concatenate((lmbtr_initial, lmbtr_final), axis=None)
+
+    return lmbtr_total

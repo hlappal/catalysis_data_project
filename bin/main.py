@@ -4,27 +4,7 @@ import os
 import sys
 from catalysis_hub import catalysis_hub
 from catapp import catapp
-from preprocess import preprocess
-
-
-def fetch_data(database, root_dir, re_fetch=False):
-    """ """
-    # Define the fetch message
-    if re_fetch:
-        msg = "Re-fetching "
-    else:
-        msg = "Fetching "
-    msg += "data from " + database + " database..."
-
-    print(msg)
-    if database == "Catalysis-hub":
-        catalysis_hub(root_dir)
-        print("Done")
-    elif database == "CatApp":
-        catapp(root_dir)
-        print("Done")
-    else:
-        print(f"Database error: No such database as {database}")
+from preprocess import preprocess, construct_struct_descriptors
 
 
 def main(arg):
@@ -55,8 +35,30 @@ def main(arg):
             print("CatApp data already exists at data/reactions_catapp.json")
 
     # Load and preprocess the data
+    print("Processing data...")
     df = preprocess(root_dir)
     print(df.head())
+
+    # Construct structural descriptors
+    construct_struct_descriptors(root_dir)
+
+
+def fetch_data(database, root_dir, re_fetch=False):
+    """ """
+    # Define the fetch message
+    if re_fetch:
+        msg = "Re-fetching "
+    else:
+        msg = "Fetching "
+    msg += "data from " + database + " database..."
+
+    print(msg)
+    if database == "Catalysis-hub":
+        catalysis_hub(root_dir)
+    elif database == "CatApp":
+        catapp(root_dir)
+    else:
+        print(f"Database error: No such database as {database}")
 
 
 def print_help():
