@@ -5,4 +5,13 @@ These are script files related to my master's thesis project. The scripts query
 [CatApp](https://cmr.fysik.dtu.dk/catapp/catapp.html#catapp1) databases for
 heterogeneous catalysis reaction data.
 
-***catalysis\_hub.ipynb*** searches the Catalysis-hub database for catalysis reactions.
+**catalysis\_hub.ipynb** searches the Catalysis-hub database.
+
+**catapp.ipynb** searches the CatApp database.
+
+**preprocess.ipynb** performs preprocessing on the data, unifying the datasets
+into one, and cleaning the data.
+
+**model.ipynb** runs the machine learning models training and predictions on the data.
+
+**case_\_ study.ipynb** runs the predictions of activation energy on case study reactions.
