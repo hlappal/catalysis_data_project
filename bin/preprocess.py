@@ -98,14 +98,6 @@ def parse_reactants_products(df, db_name, max_reactants, max_products):
     """
     """
 
-    # Drop redundant columns
-    drop_names = ["dftCode", "id", "pubId", "username"]
-    for name in drop_names:
-        try:
-            df = df.drop(name, axis=1)
-        except KeyError:
-            pass
-
     # Create a list of column names
     col_names = []
     for i in range(max_reactants):
@@ -165,6 +157,15 @@ def parse_reactants_products(df, db_name, max_reactants, max_products):
         else:
             print(f"Error: No database {db_name} found")
 
+    # Drop redundant columns
+    drop_names = ["dftCode", "id", "pubId", "username",
+                 "reactants", "products"]
+    for name in drop_names:
+        try:
+            df = df.drop(name, axis=1)
+        except KeyError:
+            pass
+
     # Rename columns
     df.rename(columns={
         "chemicalComposition": "Chemical composition",
@@ -181,8 +182,6 @@ def parse_reactants_products(df, db_name, max_reactants, max_products):
     for name in col_names:
         if name not in df:
             df[name] = "None"
-    if db_name == "Catalysis-hub":
-        df = df.drop(["reactants", "products"], axis=1)
     df = df[col_names]
 
     return df
