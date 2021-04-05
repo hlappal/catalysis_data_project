@@ -14,4 +14,4 @@ into one, and cleaning the data.
 
 **model.ipynb** runs the machine learning models training and predictions on the data.
 
-**case_\_study.ipynb** runs the predictions of activation energy on case study reactions.
+**case\_study.ipynb** runs the predictions of activation energy on case study reactions.
